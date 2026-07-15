@@ -6,7 +6,7 @@
     <parent>
         <groupId>io.github.kukpt.alertflow</groupId>
         <artifactId>alert-flow</artifactId>
-        <version>0.1.0-SNAPSHOT</version>
+        <version>${revision}</version>
     </parent>
 
     <artifactId>alert-flow-core</artifactId>
