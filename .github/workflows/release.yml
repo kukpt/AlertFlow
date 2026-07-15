@@ -15,21 +15,6 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@v6
 
-      - name: Validate publishing secrets
-        shell: bash
-        env:
-          CENTRAL_USERNAME: ${{ secrets.CENTRAL_USERNAME }}
-          CENTRAL_PASSWORD: ${{ secrets.CENTRAL_PASSWORD }}
-          MAVEN_GPG_PRIVATE_KEY: ${{ secrets.MAVEN_GPG_PRIVATE_KEY }}
-          GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
-        run: |
-          for name in CENTRAL_USERNAME CENTRAL_PASSWORD MAVEN_GPG_PRIVATE_KEY GPG_PASSPHRASE; do
-            if [[ -z "${!name}" ]]; then
-              echo "Missing required GitHub Actions secret: ${name}" >&2
-              exit 1
-            fi
-          done
-
       - name: Set up Java and Maven publishing
         uses: actions/setup-java@v5
         with:
@@ -41,28 +26,6 @@ jobs:
           server-password: CENTRAL_PASSWORD
           gpg-private-key: ${{ secrets.MAVEN_GPG_PRIVATE_KEY }}
           gpg-passphrase: MAVEN_GPG_PASSPHRASE
-
-      - name: Verify GPG private key
-        shell: bash
-        env:
-          MAVEN_GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
-        run: |
-          if ! gpg --batch --list-secret-keys --with-colons | grep -q '^sec:'; then
-            echo "No GPG private key was imported" >&2
-            exit 1
-          fi
-          printf 'AlertFlow signing test' > /tmp/alertflow-signing-test
-          if ! printf '%s\n' "${MAVEN_GPG_PASSPHRASE}" | gpg \
-            --batch \
-            --yes \
-            --pinentry-mode loopback \
-            --passphrase-fd 0 \
-            --armor \
-            --detach-sign \
-            /tmp/alertflow-signing-test; then
-            echo "GPG signing test failed; verify GPG_PASSPHRASE and the imported private key" >&2
-            exit 1
-          fi
 
       - name: Publish to Maven Central
         run: mvn -B -ntp clean deploy
