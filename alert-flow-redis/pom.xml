@@ -10,6 +10,7 @@
     </parent>
 
     <artifactId>alert-flow-redis</artifactId>
+    <name>AlertFlow Redis</name>
 
     <dependencies>
         <dependency>

@@ -10,6 +10,7 @@
     </parent>
 
     <artifactId>alert-flow-vertx</artifactId>
+    <name>AlertFlow Vert.x</name>
 
     <dependencies>
         <dependency>

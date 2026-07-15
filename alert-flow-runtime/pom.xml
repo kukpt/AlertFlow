@@ -8,6 +8,7 @@
         <version>${revision}</version>
     </parent>
     <artifactId>alert-flow-runtime</artifactId>
+    <name>AlertFlow Runtime</name>
     <dependencies>
         <dependency>
             <groupId>io.github.kukpt.alertflow</groupId>

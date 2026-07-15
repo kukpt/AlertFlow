@@ -10,6 +10,7 @@
     </parent>
 
     <artifactId>alert-flow-core</artifactId>
+    <name>AlertFlow Core</name>
 
     <dependencies>
         <dependency>
