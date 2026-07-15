@@ -3,15 +3,18 @@
          xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
     <modelVersion>4.0.0</modelVersion>
 
-    <groupId>com.alertflow</groupId>
-    <artifactId>alarm-engine</artifactId>
+    <groupId>io.github.kukpt.alertflow</groupId>
+    <artifactId>alert-flow</artifactId>
+    <name>AlertFlow</name>
     <version>0.1.0-SNAPSHOT</version>
     <packaging>pom</packaging>
 
     <modules>
-        <module>alarm-engine-core</module>
-        <module>alarm-engine-vertx</module>
-        <module>alarm-engine-example</module>
+        <module>alert-flow-core</module>
+        <module>alert-flow-runtime</module>
+        <module>alert-flow-vertx</module>
+        <module>alert-flow-redis</module>
+        <module>alert-flow-example</module>
     </modules>
 
     <properties>
@@ -20,6 +23,7 @@
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <junit.version>5.10.2</junit.version>
         <vertx.version>4.5.8</vertx.version>
+        <jedis.version>5.1.3</jedis.version>
     </properties>
 
     <dependencyManagement>
@@ -33,4 +37,14 @@
             </dependency>
         </dependencies>
     </dependencyManagement>
+
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-surefire-plugin</artifactId>
+                <version>3.2.5</version>
+            </plugin>
+        </plugins>
+    </build>
 </project>

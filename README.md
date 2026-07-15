@@ -1,6 +1,6 @@
-# alarm-engine
+# alert-flow
 
-`alarm-engine` 是一个轻量级设备数据实时预警引擎，用于以 jar 包形式嵌入业务系统。
+`alert-flow` 是一个轻量级设备数据实时预警引擎，可作为 jar 嵌入 Vert.x 项目，也可由相同 runtime 组装为独立服务。
 
 它只负责接收设备数据、匹配规则、维护时间窗口、判断触发/恢复、输出预警事件。设备管理、页面、通知、权限、数据库表结构、报表等业务能力不属于本项目。
 
@@ -8,19 +8,16 @@
 
 如果你是 coding agent，优先读这个 README，再按任务需要读对应文件。
 
-- 核心入口: `alarm-engine-core/src/main/java/com/alertflow/alarm/core/AlarmEngine.java`
-- 规则计算: `alarm-engine-core/src/main/java/com/alertflow/alarm/core/rule/RuleEvaluator.java`
-- 滑动窗口: `alarm-engine-core/src/main/java/com/alertflow/alarm/core/window/WindowBuffer.java`
-- 状态去重: `alarm-engine-core/src/main/java/com/alertflow/alarm/core/state/AlarmState.java`
-- 扩展接口: `alarm-engine-core/src/main/java/com/alertflow/alarm/core/spi/`
-- Vert.x 适配: `alarm-engine-vertx/src/main/java/com/alertflow/alarm/vertx/`
-- 使用示例: `alarm-engine-example/src/main/java/com/alertflow/alarm/example/EventBusExample.java`
-- 测试入口: `alarm-engine-core/src/test/java/com/alertflow/alarm/core/AlarmEngineTest.java`
+- 核心入口: `alert-flow-core/src/main/java/io/github/kukpt/alertflow/core/AlarmEngine.java`
+- 运行时: `alert-flow-runtime/src/main/java/io/github/kukpt/alertflow/runtime/AlertFlowRuntime.java`
+- Vert.x 适配: `alert-flow-vertx/src/main/java/io/github/kukpt/alertflow/vertx/`
+- Redis 状态后端: `alert-flow-redis/src/main/java/io/github/kukpt/alertflow/redis/`
+- 使用示例: `alert-flow-example/src/main/java/io/github/kukpt/alertflow/example/EventBusExample.java`
 - 原始需求说明: `AGENT.MD`
 
 改动原则：
 
-- `alarm-engine-core` 不允许依赖 Vert.x、Spring、数据库或消息中间件。
+- `alert-flow-core` 不允许依赖 Vert.x、Spring、数据库或消息中间件。
 - 业务系统负责保存预警、发送通知、管理设备和规则来源。
 - 新增输入/输出通道时，放在独立适配模块，不要污染 core。
 - 规则判断、窗口计算、状态流转必须保持可单元测试。
@@ -29,13 +26,15 @@
 ## 模块结构
 
 ```text
-alarm-engine
-├── alarm-engine-core
-├── alarm-engine-vertx
-└── alarm-engine-example
+alert-flow
+├── alert-flow-core
+├── alert-flow-runtime
+├── alert-flow-vertx
+├── alert-flow-redis
+└── alert-flow-example
 ```
 
-### alarm-engine-core
+### alert-flow-core
 
 纯核心模块，不依赖 Vert.x。
 
@@ -47,10 +46,10 @@ alarm-engine
 - 计算规则结果
 - 管理预警状态并做事件去重
 - 判断恢复
-- 暴露 `RuleProvider`、`AlarmStateStore`、`AlarmEventSink` 扩展接口
+- 暴露 `RuleProvider`、`AlarmStateStore`、`WindowStore`、`AlarmEventSink` 扩展接口
 - 提供内存实现用于第一版和测试
 
-### alarm-engine-vertx
+### alert-flow-vertx
 
 Vert.x EventBus 适配模块。
 
@@ -60,8 +59,18 @@ Vert.x EventBus 适配模块。
 - 将 JSON 转为 `DeviceData`
 - 调用 `AlarmEngine.handle(DeviceData)`
 - 按事件类型发布到 `alarm.triggered`、`alarm.updated`、`alarm.recovered`
+- 使用 worker 执行同步 Engine/Redis 调用，避免阻塞 Event Loop
+- 提供可配置地址、错误地址和 `AlertFlowVerticle`
 
-### alarm-engine-example
+### alert-flow-runtime
+
+负责 Engine 组装、生命周期、OFFLINE 定时扫描、输入幂等和 UPDATED 输出策略。
+
+### alert-flow-redis
+
+提供 `RedisWindowStore`、`RedisAlarmStateStore`、`RedisLastSeenStore` 和 `RedisDataDeduplicator`。Redis 保存的是计算状态，不是业务告警记录。
+
+### alert-flow-example
 
 最小接入示例，演示如何创建规则、启动 Vert.x 适配并发送设备数据。
 
@@ -101,6 +110,12 @@ alarm.updated
 alarm.recovered
 ```
 
+无效输入：
+
+```text
+alarm.input.invalid
+```
+
 ## 数据模型
 
 ### DeviceData
@@ -110,12 +125,15 @@ alarm.recovered
 关键字段：
 
 - `deviceId`: 设备 ID
+- `dataId`: 可选幂等 ID；配置 Deduplicator 后重复 ID 只处理一次
 - `deviceType`: 设备类型
 - `metric`: 指标名
 - `value`: 当前值
 - `unit`: 单位
 - `reportTime`: 上报时间，核心使用 `Instant`
 - `tags`: 扩展标签
+
+同一 `deviceId + metric` 下，早于当前最后上报时间的乱序消息会被拒绝，不参与规则计算。
 
 ### AlarmRule
 
@@ -198,11 +216,17 @@ core 只定义接口，不绑定具体基础设施。
 - `RuleProvider`: 规则来源
 - `AlarmStateStore`: 预警状态存储
 - `AlarmEventSink`: 事件输出
+- `WindowStore`: 滑动窗口状态
+- `LastSeenStore`: 最后上报数据，用于 OFFLINE 检测
+- `DataDeduplicator`: 输入幂等
 
 已有内存实现：
 
 - `MemoryRuleProvider`
 - `MemoryAlarmStateStore`
+- `MemoryWindowStore`
+- `MemoryLastSeenStore`
+- `MemoryDataDeduplicator`
 - `CollectingAlarmEventSink`
 
 已有 Vert.x 实现：
@@ -211,7 +235,7 @@ core 只定义接口，不绑定具体基础设施。
 - `EventBusAlarmEventPublisher`
 - `VertxAlarmEngineStarter`
 
-后续可以新增模块实现 Kafka、MQTT、RabbitMQ、HTTP、Spring Event、JDBC、Redis 等，但不要直接放进 `alarm-engine-core`。
+Redis 生产状态实现已经位于 `alert-flow-redis`。Kafka、MQTT、HTTP 等输入输出协议应继续放在独立适配模块，不要放进 core。
 
 ## 快速运行
 
@@ -224,7 +248,7 @@ mvn test
 运行示例：
 
 ```bash
-mvn -pl alarm-engine-example exec:java -Dexec.mainClass=com.alertflow.alarm.example.EventBusExample
+mvn -pl alert-flow-example exec:java -Dexec.mainClass=io.github.kukpt.alertflow.example.EventBusExample
 ```
 
 完整清理并测试：
@@ -240,16 +264,25 @@ mvn clean test
 BUILD SUCCESS
 ```
 
+Redis 集成测试默认跳过；本机启动 Redis 后可显式执行：
+
+```bash
+mvn -pl alert-flow-redis -am test \
+  -Dalertflow.redis.integration=true \
+  -Dalertflow.redis.port=6379
+```
+
 ## 示例输入
 
 ```json
 {
+  "dataId": "report-D001-20260709-100000",
   "deviceId": "D001",
   "deviceType": "displacement_sensor",
   "metric": "displacement",
   "value": 120.5,
   "unit": "mm",
-  "reportTime": "2026-07-09T10:00:00"
+  "reportTime": "2026-07-09T10:00:00Z"
 }
 ```
 
@@ -279,7 +312,7 @@ AlarmRule rule = new AlarmRule(
 
 - 新增规则类型: 改 `RuleType` 和 `RuleEvaluator`，补 `AlarmEngineTest`
 - 修改状态流转: 改 `AlarmEngine` 和 `AlarmState`，补覆盖触发/更新/恢复的测试
-- 新增存储实现: 实现 `AlarmStateStore`，不要修改核心状态模型除非必要
+- 新增存储实现: 实现 `AlarmStateStore` 或 `WindowStore`，不要修改核心状态模型除非必要
 - 新增规则来源: 实现 `RuleProvider`
 - 新增事件输出: 实现 `AlarmEventSink`
 - 新增接入通道: 新建适配模块或放入对应适配包，避免 core 依赖外部框架
